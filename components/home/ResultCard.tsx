@@ -17,6 +17,30 @@ interface ResultCardProps {
   onEdit: (type: string, newValue: unknown) => void;
 }
 
+/**
+ * Turns a plain string or a key/value object into clean, copy-safe text.
+ * - Preserves paragraph breaks the model returned.
+ * - Joins object fields with a blank line so sections never run together.
+ * - Trims stray trailing/leading whitespace without collapsing internal breaks.
+ */
+function toDisplayText(value: unknown): string {
+  if (typeof value === "string") {
+    return value.trim();
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value as Record<string, string>)
+      .map(([key, val]) => {
+        const label = key.charAt(0).toUpperCase() + key.slice(1);
+        return `${label}:\n${String(val).trim()}`;
+      })
+      .join("\n\n")
+      .trim();
+  }
+
+  return String(value ?? "").trim();
+}
+
 export default function ResultCard({
   type,
   value,
@@ -32,16 +56,13 @@ export default function ResultCard({
   const reelData: ReelData | null =
     reel && value && typeof value === "object" ? (value as ReelData) : null;
 
-  const plainDisplay =
-    typeof value === "string"
-      ? value
-      : typeof value === "object" && value !== null
-        ? Object.entries(value as Record<string, string>)
-            .map(([k, v]) => `${k}\n${v}`)
-            .join("\n\n")
-        : String(value ?? "");
+  const plainDisplay = toDisplayText(value);
 
-  const actionText = reelData ? flattenReelData(reelData) : plainDisplay;
+  // For reels, flattenReelData should already insert blank lines between
+  // hook / scenes / cta — this just guards against it collapsing accidentally.
+  const actionText = reelData
+    ? flattenReelData(reelData).trim()
+    : plainDisplay;
 
   const config = getPlatformConfig(type);
   const Icon = config?.icon;
@@ -118,7 +139,7 @@ export default function ResultCard({
           <EditableText
             value={plainDisplay}
             onChange={(next) => onEdit(type, next)}
-            className="text-sm leading-relaxed text-black/80"
+            className="whitespace-pre-wrap text-sm leading-relaxed text-black/80"
           />
         )}
       </div>

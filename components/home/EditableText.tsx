@@ -18,6 +18,8 @@ const PRESETS = [
   { label: "Fix grammar", instruction: "Fix any grammar or spelling mistakes, keep the meaning the same" },
 ];
 
+const TOOLBAR_MARGIN = 12; // min gap from screen edges, px
+
 async function rewriteWithAI(selectedText: string, instruction: string) {
   const res = await fetch("/api/edit-text", {
     method: "POST",
@@ -50,6 +52,13 @@ export default function EditableText({
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const offsetsRef = useRef<{ start: number; end: number } | null>(null);
 
+  // True while the user's finger/mouse is down on the toolbar itself.
+  // While true we must NOT let a selectionchange-triggered collapse hide it —
+  // that's exactly what mobile browsers do the instant you touch a button
+  // outside the selected text, before the click/tap can register.
+  const interactingWithToolbarRef = useRef(false);
+
+  const [rawPos, setRawPos] = useState<{ top: number; left: number } | null>(null);
   const [toolbarPos, setToolbarPos] = useState<{ top: number; left: number } | null>(null);
   const [showCustom, setShowCustom] = useState(false);
   const [customText, setCustomText] = useState("");
@@ -58,11 +67,16 @@ export default function EditableText({
 
   useEffect(() => {
     function handleSelectionChange() {
+      // Ignore selection collapses caused by the user touching/clicking the
+      // toolbar — that's not a real "selection cleared", it's just how touch
+      // devices report a tap outside the selected range.
+      if (interactingWithToolbarRef.current) return;
+
       const sel = window.getSelection();
-      const toolbarHasFocus = !!toolbarRef.current?.contains(document.activeElement);
 
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-        if (!toolbarHasFocus) setToolbarPos(null);
+        setRawPos(null);
+        setToolbarPos(null);
         return;
       }
 
@@ -75,7 +89,7 @@ export default function EditableText({
 
       offsetsRef.current = getTextOffsets(el, range);
       const rect = range.getBoundingClientRect();
-      setToolbarPos({ top: rect.top - 46, left: rect.left + rect.width / 2 });
+      setRawPos({ top: rect.top - 46, left: rect.left + rect.width / 2 });
       setError(null);
       setShowCustom(false);
     }
@@ -83,6 +97,28 @@ export default function EditableText({
     document.addEventListener("selectionchange", handleSelectionChange);
     return () => document.removeEventListener("selectionchange", handleSelectionChange);
   }, []);
+
+  // Clamp the toolbar inside the viewport once we know its real width/height
+  // (we can't know that until it's rendered at least once).
+  useEffect(() => {
+    if (!rawPos) {
+      setToolbarPos(null);
+      return;
+    }
+
+    const el = toolbarRef.current;
+    const width = el?.offsetWidth ?? 220;
+    const height = el?.offsetHeight ?? 40;
+
+    const left = Math.min(
+      Math.max(rawPos.left, width / 2 + TOOLBAR_MARGIN),
+      window.innerWidth - width / 2 - TOOLBAR_MARGIN,
+    );
+    const top = Math.max(rawPos.top, height + TOOLBAR_MARGIN);
+
+    setToolbarPos({ top, left });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rawPos]);
 
   // Keep the contenteditable DOM in sync with `value`.
   // React does NOT re-render text inside a contentEditable element on prop
@@ -92,14 +128,13 @@ export default function EditableText({
   useEffect(() => {
     const el = elRef.current;
     if (!el) return;
-    // Don't stomp on the user's cursor while they're actively typing/focused
-    // and already in sync — only sync when there's an actual mismatch.
     if (el.innerText !== value) {
       el.innerText = value;
     }
   }, [value]);
 
   function closeToolbar() {
+    setRawPos(null);
     setToolbarPos(null);
     setShowCustom(false);
     setCustomText("");
@@ -136,6 +171,19 @@ export default function EditableText({
     }
   }
 
+  // Fired on both mouse and touch: marks "don't dismiss me" for the whole
+  // duration of the interaction, until touchend/mouseup releases it.
+  function guardToolbar() {
+    interactingWithToolbarRef.current = true;
+  }
+  function releaseToolbarGuard() {
+    // Small delay so the click/tap event on the button still fires and reads
+    // offsetsRef before we start reacting to selectionchange again.
+    setTimeout(() => {
+      interactingWithToolbarRef.current = false;
+    }, 50);
+  }
+
   return (
     <>
       <Tag
@@ -151,11 +199,15 @@ export default function EditableText({
       {toolbarPos && (
         <div
           ref={toolbarRef}
-          style={{ top: toolbarPos.top, left: toolbarPos.left, transform: "translate(-50%, -100%)" }}
+          onMouseDown={guardToolbar}
+          onMouseUp={releaseToolbarGuard}
+          onTouchStart={guardToolbar}
+          onTouchEnd={releaseToolbarGuard}
+          style={{ top: toolbarPos.top, left: toolbarPos.left, transform: "translate(-50%, 0)" }}
           className="fixed z-50 w-max max-w-[calc(100vw-24px)] rounded-lg border border-black/10 bg-white p-1.5 shadow-[0_4px_16px_rgba(0,0,0,0.15)]"
         >
           {loading ? (
-            <div className="flex items-center gap-2 px-2 py-1.5 text-sm text-black/60">
+            <div className="flex items-center gap-2 px-2 py-2 text-sm text-black/60">
               <Loader2 size={14} className="animate-spin" />
               Rewriting...
             </div>
@@ -170,44 +222,41 @@ export default function EditableText({
                   if (e.key === "Escape") closeToolbar();
                 }}
                 placeholder="Tell AI what to change..."
-                className="w-52 rounded-md border border-black/10 px-2 py-1 text-sm outline-none focus:border-[#F5C518]"
+                className="w-52 rounded-md border border-black/10 px-2 py-2 text-sm outline-none focus:border-[#F5C518]"
               />
               <button
-                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => customText.trim() && handleAction(customText.trim())}
-                className="rounded-md bg-[#F5C518] px-2 py-1 text-sm font-medium text-black hover:brightness-95"
+                className="min-h-[36px] rounded-md bg-[#F5C518] px-3 py-2 text-sm font-medium text-black active:brightness-90"
               >
                 Go
               </button>
-              <button onMouseDown={(e) => e.preventDefault()} onClick={closeToolbar} className="rounded-md p-1 text-black/40 hover:bg-black/5">
-                <X size={14} />
+              <button onClick={closeToolbar} className="flex h-9 w-9 items-center justify-center rounded-md text-black/40 active:bg-black/5">
+                <X size={16} />
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-0.5">
               <span className="flex items-center gap-1 px-1.5 text-black/40">
                 <Sparkles size={12} />
               </span>
               {PRESETS.map((p) => (
                 <button
                   key={p.label}
-                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => handleAction(p.instruction)}
-                  className="whitespace-nowrap rounded-md px-2 py-1 text-sm text-black/80 hover:bg-black/5"
+                  className="min-h-[36px] whitespace-nowrap rounded-md px-2.5 py-2 text-sm text-black/80 active:bg-black/10"
                 >
                   {p.label}
                 </button>
               ))}
               <div className="mx-0.5 h-4 w-px bg-black/10" />
               <button
-                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setShowCustom(true)}
-                className="whitespace-nowrap rounded-md px-2 py-1 text-sm font-medium text-[#8a6d00] hover:bg-[#F5C518]/20"
+                className="min-h-[36px] whitespace-nowrap rounded-md px-2.5 py-2 text-sm font-medium text-[#8a6d00] active:bg-[#F5C518]/30"
               >
                 Custom...
               </button>
-              <button onMouseDown={(e) => e.preventDefault()} onClick={closeToolbar} className="rounded-md p-1 text-black/40 hover:bg-black/5">
-                <X size={14} />
+              <button onClick={closeToolbar} className="flex h-9 w-9 items-center justify-center rounded-md text-black/40 active:bg-black/5">
+                <X size={16} />
               </button>
             </div>
           )}

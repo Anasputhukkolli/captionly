@@ -5,6 +5,26 @@ const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
 
+// Detects if the user explicitly asked to avoid emojis, in common phrasings/typos.
+function userWantsNoEmoji(prompt: string): boolean {
+  const p = prompt.toLowerCase();
+  const patterns = [
+    "no emoji",
+    "no emojis",
+    "without emoji",
+    "without emojis",
+    "don't use emoji",
+    "dont use emoji",
+    "avoid emoji",
+    "no emojy",
+    "no emojies",
+    "no emoticon",
+    "plain text only",
+    "no icons",
+  ];
+  return patterns.some((phrase) => p.includes(phrase));
+}
+
 export async function POST(req: Request) {
   try {
     const { prompt, types, image } = await req.json();
@@ -12,13 +32,15 @@ export async function POST(req: Request) {
     if (!prompt?.trim() || !Array.isArray(types) || types.length === 0) {
       return NextResponse.json(
         { error: "Missing prompt or types" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     const hasReelScript = types.some((t: string) =>
-      t.toLowerCase().includes("reel")
+      t.toLowerCase().includes("reel"),
     );
+
+    const noEmoji = userWantsNoEmoji(prompt);
 
     // Build the example schema. Reel script gets a special scene-based shape;
     // everything else stays a plain string.
@@ -48,37 +70,50 @@ export async function POST(req: Request) {
           ];
         }
         return [t, "generated content here"];
-      })
+      }),
     );
+
+    const emojiInstruction = noEmoji
+      ? `EMOJI RULE: The user explicitly asked for NO emojis. Do not include any emoji or emoticon anywhere in any field, including hashtags and reel scripts. Plain text only.`
+      : `EMOJI RULE: Use emoji naturally where they add tone or warmth — 1-3 per caption, never stacked back to back, never one on every line. Place them at the end of a sentence or phrase, not randomly mid-word. Reel scripts should stay text-only in "visual"/"voiceover" fields (no emoji there) but the hook and cta may use them sparingly.`;
 
     const userContent: any[] = [
       {
         type: "text",
         text: `
-Analyze the uploaded image if provided.
-
-User idea:
+USER'S RAW INPUT:
 ${prompt}
 
-Generate content for each of these content types: ${types.join(", ")}
+SELECTED CONTENT TYPES:
+${types.join(", ")}
 
-Return a JSON object where the keys are EXACTLY these strings (character for character, same casing):
+First understand what the user probably means, even if the input has spelling mistakes or incomplete wording.
+
+If the user mentions "my app", "this platform", "my project", or similar, assume they want content about Captiondoo unless the image clearly shows something else.
+
+Captiondoo is an AI content creation platform that can generate Instagram captions, LinkedIn posts, Facebook captions, X posts, hashtags, reel scripts, and content ideas from one prompt or uploaded image.
+
+${emojiInstruction}
+
+Generate complete, ready-to-post content for each selected type, following the FORMATTING RULES from the system prompt exactly — proper line breaks, ${noEmoji ? "no emojis" : "natural emoji use"}, hashtags on their own line at the end.
+
+Return a JSON object where the keys are EXACTLY these strings:
 ${types.map((t: string) => `"${t}"`).join(", ")}
 
-Do not rename, shorten, or relabel the keys. Do not use generic labels like "Caption" or "Post".
+Do not rename the keys.
 
 ${
   hasReelScript
-    ? `For "Reel script" specifically: break it into a scene-by-scene structure with a hook, 3-6 scenes (each with duration, visual direction, and voiceover/caption text), and a closing CTA. Keep each scene short and punchy, suited for a 15-30 second vertical video.`
+    ? `For "Reel script": return a structured object with hook, 3-6 scenes, and cta. Each scene's visual and voiceover must be a full clean sentence.`
     : ""
 }
 
-All other content types should be a plain string value (not an object).
+All other content types should be plain strings with proper paragraph breaks ("\\n\\n") — never a single unbroken block of text.
 
-Example of the exact shape expected:
+Expected JSON shape:
 ${JSON.stringify(exampleSchema, null, 2)}
 
-Return valid JSON only, no extra text.
+Return valid JSON only.
 `,
       },
     ];
@@ -97,8 +132,27 @@ Return valid JSON only, no extra text.
       messages: [
         {
           role: "system",
-          content:
-            "You are Captionly, an AI social media content creator. You always return valid JSON with EXACTLY the keys the user specifies, never renamed or generic labels. Every type is a plain string EXCEPT 'Reel script', which must be a structured object with hook, scenes (array), and cta as described.",
+          content: `You are Captiondoo, an intelligent AI social media content creator.
+
+Users may write short, unclear, misspelled, grammatically wrong, or incomplete prompts.
+
+Your job:
+- Understand the user's real intention.
+- Correct spelling and grammar internally.
+- Never simply repeat the user's input.
+- Generate complete, useful, ready-to-post content.
+- If details are missing, make reasonable assumptions.
+- Use the uploaded image context if provided.
+- Return valid JSON with EXACTLY the requested keys.
+
+FORMATTING RULES (very important, apply to every plain-string field):
+- Write in short, scannable paragraphs (1-3 sentences each), separated by a blank line ("\\n\\n"). Never return one dense paragraph.
+- ${noEmoji ? "Do NOT use any emoji or emoticon anywhere, in any field." : "Use emoji naturally and sparingly (1-3 per caption) to add tone, not decoration overload. Never stack multiple emoji in a row."}
+- If the content includes hashtags, put them on their own line at the very end, separated from the caption body by a blank line — never inline mid-sentence.
+- If the content has a hook/body/CTA structure (e.g. LinkedIn, Instagram), separate each part with a blank line.
+- Do not use markdown symbols like ** or # for emphasis — this is plain text for social platforms.
+
+Every type must be a plain string EXCEPT "Reel script", which must be an object with hook, scenes, and cta.`,
         },
         {
           role: "user",
@@ -143,7 +197,7 @@ Return valid JSON only, no extra text.
     console.error("Generate API error:", error);
     return NextResponse.json(
       { error: "Failed to generate content" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
