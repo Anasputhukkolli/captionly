@@ -16,10 +16,31 @@ const CONTENT_TYPES = [
 
 type ContentType = (typeof CONTENT_TYPES)[number];
 
+interface ReelScene {
+  scene?: number;
+  duration?: string;
+  visual?: string;
+  voiceover?: string;
+}
+
+interface ReelData {
+  hook?: string;
+  scenes?: ReelScene[];
+  cta?: string;
+}
+
 function InstagramIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className}>
-      <rect x="2" y="2" width="20" height="20" rx="5" stroke="currentColor" strokeWidth="2" />
+      <rect
+        x="2"
+        y="2"
+        width="20"
+        height="20"
+        rx="5"
+        stroke="currentColor"
+        strokeWidth="2"
+      />
       <circle cx="12" cy="12" r="4" stroke="currentColor" strokeWidth="2" />
       <circle cx="17.5" cy="6.5" r="1.2" fill="currentColor" />
     </svg>
@@ -82,13 +103,12 @@ const FACEBOOK_CONFIG: PlatformConfig = {
 const X_CONFIG: PlatformConfig = {
   icon: XIcon,
   prefill: true,
-  postUrl: (text) => `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`,
+  postUrl: (text) =>
+    `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`,
   fallbackUrl: "https://twitter.com/",
 };
 
 // Fuzzy-matches any result key (however the API labels it) to a platform.
-// This means even if your API returns "Caption", "Insta Caption", "Reel",
-// "Post for X", etc. — it still finds the right platform and icon.
 function getPlatformConfig(type: string): PlatformConfig | null {
   const t = type.toLowerCase();
 
@@ -104,8 +124,25 @@ function getPlatformConfig(type: string): PlatformConfig | null {
   if (t.includes("x post") || t.includes("twitter") || t === "x") {
     return X_CONFIG;
   }
-  // Hashtags, Content ideas, or anything unrecognized: no platform icon.
   return null;
+}
+
+function isReelType(type: string) {
+  return type.toLowerCase().includes("reel");
+}
+
+// Flattens a reel's structured data into readable plain text for copy/redirect.
+function flattenReelData(reelData: ReelData): string {
+  return [
+    reelData.hook ? `HOOK: ${reelData.hook}` : "",
+    ...(reelData.scenes || []).map(
+      (s) =>
+        `SCENE ${s.scene ?? ""} (${s.duration ?? ""})\nVisual: ${s.visual ?? ""}\nVoiceover: ${s.voiceover ?? ""}`,
+    ),
+    reelData.cta ? `CTA: ${reelData.cta}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 export default function Landing() {
@@ -113,7 +150,7 @@ export default function Landing() {
   const [selectedTypes, setSelectedTypes] = useState<ContentType[]>([]);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [results, setResults] = useState<Record<string, string> | null>(null);
+  const [results, setResults] = useState<Record<string, unknown> | null>(null);
   const [copiedType, setCopiedType] = useState<string | null>(null);
   const [generatingTypes, setGeneratingTypes] = useState<ContentType[]>([]);
   const [regeneratingType, setRegeneratingType] = useState<string | null>(null);
@@ -177,12 +214,12 @@ export default function Landing() {
         }),
       });
       const data = await res.json();
-      const newText = data.results?.[type];
-      if (newText) {
-        setResults((prev) => (prev ? { ...prev, [type]: newText } : prev));
+      const newValue = data.results?.[type];
+      if (newValue !== undefined) {
+        setResults((prev) => (prev ? { ...prev, [type]: newValue } : prev));
       }
     } catch {
-      // keep existing text if regeneration fails
+      // keep existing content if regeneration fails
     } finally {
       setRegeneratingType(null);
     }
@@ -192,7 +229,10 @@ export default function Landing() {
     try {
       await navigator.clipboard.writeText(text);
       setCopiedType(type);
-      setTimeout(() => setCopiedType((prev) => (prev === type ? null : prev)), 1800);
+      setTimeout(
+        () => setCopiedType((prev) => (prev === type ? null : prev)),
+        1800,
+      );
     } catch {
       // clipboard write failed silently
     }
@@ -206,7 +246,10 @@ export default function Landing() {
       try {
         await navigator.clipboard.writeText(text);
         setCopiedType(type);
-        setTimeout(() => setCopiedType((prev) => (prev === type ? null : prev)), 1800);
+        setTimeout(
+          () => setCopiedType((prev) => (prev === type ? null : prev)),
+          1800,
+        );
       } catch {
         // ignore
       }
@@ -222,19 +265,101 @@ export default function Landing() {
 
   return (
     <section className="flex min-h-screen w-full flex-col items-center bg-white px-4 py-16 text-center sm:px-6">
-      <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-black/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-black/60">
-        <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#F5C518]" />
-        AI SOCIAL MEDIA CONTENT STUDIO
+      <div className="mb-6 inline-flex items-center gap-2 rounded-full border-2 border-black bg-[#F5C518] px-4 py-1.5 text-xs font-black uppercase tracking-wide text-black shadow-[3px_3px_0_0_#000] animate-[wobble_3s_ease-in-out_infinite]">
+        <span className="inline-block animate-[spin_3s_linear_infinite]">
+          ⚡
+        </span>
+        Captiondoo — AI Content Studio
       </div>
 
       <h1 className="max-w-3xl text-4xl font-black leading-[1.1] tracking-tight text-black sm:text-5xl md:text-6xl">
-        One Upload.
+        <span className="inline-flex flex-wrap justify-center gap-x-3">
+          {"One Upload.".split(" ").map((word, i) => (
+            <span
+              key={i}
+              className="inline-block animate-[bounce-fun_2s_ease-in-out_infinite]"
+              style={{ animationDelay: `${i * 0.2}s` }}
+            >
+              {word}
+            </span>
+          ))}
+        </span>
         <br />
         <span className="relative inline-block">
-          <span className="relative z-10">Every Platform.</span>
-          <span className="absolute inset-x-0 bottom-1 z-0 h-3 bg-[#F5C518] md:h-4" />
+          <span className="relative z-10 inline-flex flex-wrap justify-center gap-x-3">
+            {"Every Platform".split(" ").map((word, i) => (
+              <span
+                key={i}
+                className="inline-block animate-[bounce-fun_2s_ease-in-out_infinite]"
+                style={{ animationDelay: `${0.4 + i * 0.2}s` }}
+              >
+                {word}
+              </span>
+            ))}
+          </span>
+          <svg
+            className="absolute -bottom-1 left-0 w-full animate-[wave_2.5s_ease-in-out_infinite]"
+            height="14"
+            viewBox="0 0 300 14"
+            preserveAspectRatio="none"
+          >
+            <path
+              d="M2 8 Q 60 2, 120 8 T 298 7"
+              stroke="#F5C518"
+              strokeWidth="8"
+              fill="none"
+              strokeLinecap="round"
+            />
+          </svg>
         </span>
       </h1>
+
+      <style jsx>{`
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+
+        @keyframes wobble {
+          0%,
+          100% {
+            transform: rotate(-2deg);
+          }
+          50% {
+            transform: rotate(2deg);
+          }
+        }
+
+        @keyframes bounce-fun {
+          0%,
+          100% {
+            transform: translateY(0) rotate(0deg);
+          }
+          25% {
+            transform: translateY(-10px) rotate(-3deg);
+          }
+          50% {
+            transform: translateY(0) rotate(0deg);
+          }
+          75% {
+            transform: translateY(-4px) rotate(3deg);
+          }
+        }
+
+        @keyframes wave {
+          0%,
+          100% {
+            transform: translateX(0) scaleY(1);
+          }
+          50% {
+            transform: translateX(4px) scaleY(1.3);
+          }
+        }
+      `}</style>
 
       {/* Input area */}
       <div className="mt-10 w-full max-w-2xl rounded-3xl border-2 border-black bg-[#F5C518] p-3 shadow-[6px_6px_0_0_#000]">
@@ -341,15 +466,25 @@ export default function Landing() {
       {/* Results */}
       {!isGenerating && results && (
         <div className="mt-10 grid w-full max-w-4xl grid-cols-1 gap-4 text-left sm:grid-cols-2">
-          {Object.entries(results).map(([type, text]) => {
-            const display =
-              typeof text === "string"
-                ? text
-                : typeof text === "object" && text !== null
-                  ? Object.entries(text as Record<string, string>)
+          {Object.entries(results).map(([type, value]) => {
+            const reel = isReelType(type);
+            const reelData: ReelData | null =
+              reel && value && typeof value === "object"
+                ? (value as ReelData)
+                : null;
+
+            const plainDisplay =
+              typeof value === "string"
+                ? value
+                : typeof value === "object" && value !== null
+                  ? Object.entries(value as Record<string, string>)
                       .map(([k, v]) => `${k}\n${v}`)
                       .join("\n\n")
-                  : String(text ?? "");
+                  : String(value ?? "");
+
+            const actionText = reelData
+              ? flattenReelData(reelData)
+              : plainDisplay;
 
             const config = getPlatformConfig(type);
             const Icon = config?.icon;
@@ -383,7 +518,7 @@ export default function Landing() {
                     {/* Copy */}
                     <button
                       type="button"
-                      onClick={() => handleCopy(type, display)}
+                      onClick={() => handleCopy(type, actionText)}
                       title="Copy"
                       className="flex h-7 w-7 items-center justify-center rounded-full border border-black/15 text-black/60 transition hover:border-black/40 hover:text-black"
                     >
@@ -398,7 +533,7 @@ export default function Landing() {
                     {config && Icon && (
                       <button
                         type="button"
-                        onClick={() => handleRedirect(type, display)}
+                        onClick={() => handleRedirect(type, actionText)}
                         title={`Post to ${type}`}
                         className="flex h-7 w-7 items-center justify-center rounded-full bg-black text-[#F5C518] transition hover:bg-black/85"
                       >
@@ -414,9 +549,63 @@ export default function Landing() {
                     <div className="h-3 w-11/12 animate-pulse rounded-full bg-black/10" />
                     <div className="h-3 w-4/5 animate-pulse rounded-full bg-black/10" />
                   </div>
+                ) : reelData ? (
+                  <div className="space-y-3">
+                    {reelData.hook && (
+                      <div className="rounded-xl bg-[#F5C518]/15 p-3">
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-black/40">
+                          Hook
+                        </p>
+                        <p className="text-sm font-semibold text-black">
+                          {reelData.hook}
+                        </p>
+                      </div>
+                    )}
+
+                    {(reelData.scenes || []).map((s, i) => (
+                      <div
+                        key={i}
+                        className="rounded-xl border border-black/10 p-3"
+                      >
+                        <div className="mb-1 flex items-center justify-between">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-black/40">
+                            Scene {s.scene ?? i + 1}
+                          </p>
+                          {s.duration && (
+                            <span className="rounded-full bg-black/5 px-2 py-0.5 text-[10px] font-semibold text-black/50">
+                              {s.duration}
+                            </span>
+                          )}
+                        </div>
+                        {s.visual && (
+                          <p className="mb-1 text-sm text-black/80">
+                            <span className="font-semibold">Visual: </span>
+                            {s.visual}
+                          </p>
+                        )}
+                        {s.voiceover && (
+                          <p className="text-sm text-black/80">
+                            <span className="font-semibold">Voiceover: </span>
+                            {s.voiceover}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+
+                    {reelData.cta && (
+                      <div className="rounded-xl bg-black p-3">
+                        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-[#F5C518]/70">
+                          CTA
+                        </p>
+                        <p className="text-sm font-semibold text-[#F5C518]">
+                          {reelData.cta}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <p className="whitespace-pre-line text-sm leading-relaxed text-black/80">
-                    {display}
+                    {plainDisplay}
                   </p>
                 )}
               </div>
