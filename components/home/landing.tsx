@@ -50,8 +50,7 @@ function XIcon({ className }: { className?: string }) {
   );
 }
 
-type PlatformIcon = (props: { className?: string }) => JSX.Element;
-
+type PlatformIcon = React.ComponentType<{ className?: string }>;
 type PlatformConfig = {
   icon: PlatformIcon;
   prefill: boolean;
