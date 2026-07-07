@@ -1,10 +1,18 @@
 import "./globals.css";
 import Header from "@/components/header";
 import Footer from "@/components/footer";
+import { Metadata } from "next";
 
-export const metadata = {
-  title: "captionly",
-  description: "AI Content Studio",
+export const metadata: Metadata = {
+  title: 'Captionly',
+  description:
+    'All in one',
+  keywords: 'Anas, Full Stack Developer, React, Django, Web Developer, UI/UX',
+  authors: [{ name: 'Anas Puthukkolli' }],
+  creator: 'Anas Puthukkolli',
+  icons: {
+    icon: './images/logo.png',
+  },
 };
 
 export default function RootLayout({
@@ -14,10 +22,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body className="flex h-screen flex-col  bg-white text-black">
         <Header />
 
-        <main>{children}</main>
+        <main className="flex-1 ">{children}</main>
 
         <Footer />
       </body>

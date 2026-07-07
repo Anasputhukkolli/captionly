@@ -1,9 +1,5 @@
-import Hero from "@/components/home/landing";
+import Landing from "@/components/home/landing";
 
 export default function Home() {
-  return (
-    <>
-      <Hero />
-    </>
-  );
+  return <Landing />;
 }
