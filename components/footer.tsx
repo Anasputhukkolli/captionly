@@ -31,7 +31,7 @@ export default function Footer() {
         
       `}</style>
 
-      <footer className="border-t-2 border-black bg-white">
+      <footer className="border-t-2 border-black bg-white ">
         {/* Powered by strip */}
         <div className="border-t-2 border-black/10">
           <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-center gap-3">

@@ -12,7 +12,7 @@ export async function POST(req: Request) {
     if (!text?.trim() || !instruction?.trim()) {
       return NextResponse.json(
         { error: "Missing text or instruction" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -34,14 +34,10 @@ export async function POST(req: Request) {
     const result = completion.choices[0]?.message?.content?.trim() || text;
 
     // Strip wrapping quotes if the model added them anyway
-    const cleaned = result.replace(/^["'](.*)["']$/s, "$1").trim();
-
+    const cleaned = result.replace(/^["']/, "").replace(/["']$/, "").trim();
     return NextResponse.json({ result: cleaned });
   } catch (error) {
     console.error("Edit-text API error:", error);
-    return NextResponse.json(
-      { error: "Failed to edit text" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to edit text" }, { status: 500 });
   }
 }

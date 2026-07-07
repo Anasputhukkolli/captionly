@@ -88,7 +88,7 @@ export default function PromptForm({
         type="button"
         onClick={onGenerate}
         disabled={isGenerating || !prompt.trim() || selectedTypes.length === 0}
-        className="mt-4 w-full rounded-2xl bg-black py-3.5 text-sm font-bold text-[#F5C518] transition hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-30"
+        className="mt-4  w-full rounded-2xl bg-black py-3.5 text-sm font-bold text-[#F5C518] transition hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-30"
       >
         {isGenerating ? (
           <span className="inline-flex items-center justify-center gap-2">
